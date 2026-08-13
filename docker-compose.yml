@@ -18,8 +18,15 @@ services:
 
     environment:
       TZ: "${TZ:-Asia/Shanghai}"
-      # 固定 SECRET_KEY，重启后会话不失效；不设则每次启动随机生成
+      # 固定 SECRET_KEY，重启后会话不失效；不设则每次启动随机生成（会被登出）
       GROK_REGISTER_SECRET_KEY: "${GROK_REGISTER_SECRET_KEY:-}"
+      # 管理员口令：读文件而不是读环境变量。werkzeug 哈希里带 $，
+      # 走 .env / environment 会被 compose 当变量插值吃掉盐值且不报错。
+      # 生成：docker compose run --rm grok-register-web python scripts/hash_password.py
+      # 文件不存在 = 不启用鉴权（本地 localhost 用法不变）
+      GROK_REGISTER_ADMIN_PASSWORD_HASH_FILE: /app/data/admin_password.hash
+      # 走 HTTPS 反代时设为 true，让 session cookie 带上 Secure 标志
+      GROK_REGISTER_COOKIE_SECURE: "${GROK_REGISTER_COOKIE_SECURE:-false}"
       # 容器内 Chromium 路径 + headful（配合 Xvfb），与 scripts/run_with_xvfb.sh 一致
       GROK_REGISTER_BROWSER_PATH: /usr/bin/chromium
       GROK_REGISTER_BROWSER_HEADLESS: "false"

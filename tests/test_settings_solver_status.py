@@ -3,6 +3,18 @@ from unittest.mock import Mock, patch
 
 import requests
 
+import os
+
+# Must precede "import app": the app builds its admin gate from os.environ at
+# import time, so an inherited deployment password would turn every route in
+# this module into a 302/401.
+for _key in (
+    'GROK_REGISTER_ADMIN_PASSWORD',
+    'GROK_REGISTER_ADMIN_PASSWORD_HASH',
+    'GROK_REGISTER_ADMIN_PASSWORD_HASH_FILE',
+):
+    os.environ.pop(_key, None)
+
 from app import app
 from core.registration.turnstile import probe_turnstile_solver
 

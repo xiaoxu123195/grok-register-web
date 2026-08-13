@@ -92,7 +92,31 @@ docker compose restart
 
 ## 6. 安全
 
-**这个服务没有任何登录认证**，任何能访问该端口的人都能看到 SSO Token 和账号密码。默认 `0.0.0.0` 发布只适合内网或有防火墙的机器。放公网时二选一：
+### 6.1 开启管理员口令（推荐）
+
+默认不启用鉴权。生成口令后重启即可生效：
+
+```bash
+docker compose run --rm grok-register-web python scripts/hash_password.py
+docker compose restart
+```
+
+哈希写在 `data/admin_password.hash`（compose 已指向 `/app/data/admin_password.hash`）。删掉该文件并重启就回到不鉴权。
+
+**为什么走文件而不是环境变量**：werkzeug 哈希形如 `scrypt:32768:8:1$盐$摘要`，里面的 `$` 会被 Docker Compose 当成变量插值**静默吃掉**——盐值消失且不报错，表现是口令永远错。实测：
+
+```
+生成: scrypt:32768:8:1$VWquWkcsUShG2jT0$472f9af0...
+经 .env 解析后: scrypt:32768:8:1$472f9af0...        ← 盐没了
+```
+
+同时建议在 `.env` 里固定 `GROK_REGISTER_SECRET_KEY`，否则每次重启 session 密钥重新随机，你会被登出。
+
+开启后 HTTP 与 WebSocket 都会鉴权，连续错 5 次锁定并逐次翻倍。细节见 [CONFIGURATION.md §2.1.1](CONFIGURATION.md#211-管理员鉴权可选)。
+
+### 6.2 口令不能替代 HTTPS
+
+**明文 HTTP 下口令和 session cookie 都是明文过网**，路径上任何人都能抓。口令挡的是端口扫描和路人，不是有心人。默认 `0.0.0.0` 发布只适合内网或有防火墙的机器。放公网时二选一：
 
 ```yaml
 # docker-compose.yml：只监听回环
@@ -106,7 +130,7 @@ ssh -N -L 5000:127.0.0.1:5000 user@server
 # 然后浏览器打开 http://localhost:5000
 ```
 
-或者前置 Nginx/Caddy，配 HTTPS + Basic Auth。**用 HTTPS 还有个额外好处**：浏览器只在安全上下文（HTTPS 或 localhost）下开放原生剪切板 API，走 HTTPS 时复制按钮用的是原生路径而不是兼容回退。
+或者前置 Nginx/Caddy 配 HTTPS。**用 HTTPS 有两个额外好处**：一是可以把 `GROK_REGISTER_COOKIE_SECURE` 设为 `true`，session cookie 不再明文可嗅；二是浏览器只在安全上下文（HTTPS 或 localhost）下开放原生剪切板 API，走 HTTPS 时复制按钮用的是原生路径而不是兼容回退。
 
 ## 7. 构建期走代理
 

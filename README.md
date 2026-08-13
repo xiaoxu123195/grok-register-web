@@ -115,7 +115,14 @@ docker compose up -d --build
 docker compose logs -f          # 看日志
 ```
 
-访问 `http://<服务器IP>:5000`。**该服务没有登录认证**，公网机器请改成回环绑定 + SSH 隧道，或前置带认证的 HTTPS 反代。细节见 [docs/DOCKER.md](docs/DOCKER.md)。
+访问 `http://<服务器IP>:5000`。可选加一道管理员口令（默认不启用）：
+
+```bash
+docker compose run --rm grok-register-web python scripts/hash_password.py
+docker compose restart
+```
+
+明文 HTTP 下口令只挡扫描器，不替代加密；公网机器仍建议回环绑定 + SSH 隧道，或前置 HTTPS 反代。细节见 [docs/DOCKER.md](docs/DOCKER.md)。
 
 ### 3. 首次配置（推荐长跑）
 
@@ -206,6 +213,7 @@ python -m unittest discover -s tests -v
 ## 注意事项
 
 - 默认绑定本机；绑定非本机地址必须显式 `--allow-remote`
+- 控制台默认无鉴权；对外暴露时用 `scripts/hash_password.py` 设管理口令（见 [docs/CONFIGURATION.md §2.1.1](docs/CONFIGURATION.md#211-管理员鉴权可选)）
 - 账号、Token、密码仅存本地 `data/`，请勿提交公开仓库
 - 资料/环境异常时会在 `data/diagnostics/` 写诊断文件
 - CPA / grok2api 交付默认关闭；开启后注意凭证目录权限

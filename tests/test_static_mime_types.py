@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 import textwrap
@@ -28,12 +29,23 @@ class StaticMimeTypesTest(unittest.TestCase):
             """
         )
 
+        # The child builds the admin gate from its environment; an inherited
+        # deployment password would redirect /static/* to the login page.
+        env = {**os.environ}
+        for key in (
+            'GROK_REGISTER_ADMIN_PASSWORD',
+            'GROK_REGISTER_ADMIN_PASSWORD_HASH',
+            'GROK_REGISTER_ADMIN_PASSWORD_HASH_FILE',
+        ):
+            env.pop(key, None)
+
         result = subprocess.run(
             [sys.executable, '-c', script],
             cwd=project_root,
             capture_output=True,
             text=True,
             check=False,
+            env=env,
         )
 
         self.assertEqual(

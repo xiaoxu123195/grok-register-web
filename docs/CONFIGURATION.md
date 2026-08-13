@@ -123,6 +123,36 @@
 | `GROK_REGISTER_CONCURRENCY` | 并发（Xvfb 脚本会强制 `1`） |
 | `GROK_REGISTER_BROWSER_START_TIMEOUT` | 浏览器启动超时秒数，默认 `90` |
 
+### 2.1.1 管理员鉴权（可选）
+
+默认关闭：不配置任何一项，控制台就跟以前一样无需登录（本地 localhost 用法不变）。
+
+| 变量 | 含义 |
+|------|------|
+| `GROK_REGISTER_ADMIN_PASSWORD_HASH_FILE` | **推荐**。指向存放口令哈希的文件（Docker 里为 `/app/data/admin_password.hash`） |
+| `GROK_REGISTER_ADMIN_PASSWORD_HASH` | 直接给哈希值。**放进 .env 时每个 `$` 必须写成 `$$`**，否则 compose 会把盐值当变量吃掉 |
+| `GROK_REGISTER_ADMIN_PASSWORD` | 明文口令，启动时哈希。仅便于临时试用，不建议长期使用 |
+| `GROK_REGISTER_SECRET_KEY` | session 签名密钥。**开了鉴权务必固定**，否则每次重启都会被登出 |
+| `GROK_REGISTER_COOKIE_SECURE` | `true` 时 cookie 带 `Secure` 标志。**仅在 HTTPS 下开**，明文 HTTP 开了会永远登不上 |
+
+生成口令（交互式，不会进 shell 历史）：
+
+```bash
+python scripts/hash_password.py                 # 写入 data/admin_password.hash
+python scripts/hash_password.py --print         # 只打印哈希
+```
+
+优先级：`_HASH_FILE` > `_HASH` > 明文。三者都没有 = 不启用。
+
+开启后的行为：
+
+- 未登录访问页面 → 302 跳 `/login`；访问 `/api/*` → 401 JSON（前端自动跳登录页）
+- **WebSocket 同样鉴权**：未登录直接拒连。connect 时会回放最近 300 条日志（含注册邮箱），不堵这里等于没加鉴权
+- 连续 5 次口令错误锁定 60 秒，之后每错一次翻倍，上限 15 分钟
+- 会话有效期 7 天；侧栏底部有「退出登录」
+
+> **明文 HTTP 下，口令和 session cookie 都是明文传输。** 加鉴权能挡住端口扫描和路人，但要真正安全仍需 HTTPS 反代或 SSH 隧道。
+
 ### 2.2 注册后端与代理
 
 | 变量 | 含义 |
