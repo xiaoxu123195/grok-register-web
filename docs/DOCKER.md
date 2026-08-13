@@ -15,7 +15,9 @@
 
 - Docker Engine 20.10+ 与 Docker Compose v2（`docker compose version` 能输出版本号）
 - 磁盘约 3GB（含 Chromium + Camoufox）
-- 构建期需要能访问 PyPI、Debian 源和 GitHub Releases（Camoufox 从 GitHub 下载）
+- 构建期需要能访问 PyPI、Debian 源和 GitHub Releases（Camoufox 从 GitHub 下载约 100MB）
+
+国内网络下 `camoufox fetch` 那一步大概率会卡住，走代理构建见 [§7 构建期走代理](#7-构建期走代理)。
 
 ## 2. 启动
 
@@ -106,10 +108,48 @@ ssh -N -L 5000:127.0.0.1:5000 user@server
 
 或者前置 Nginx/Caddy，配 HTTPS + Basic Auth。**用 HTTPS 还有个额外好处**：浏览器只在安全上下文（HTTPS 或 localhost）下开放原生剪切板 API，走 HTTPS 时复制按钮用的是原生路径而不是兼容回退。
 
-## 7. 常见问题
+## 7. 构建期走代理
+
+**关键：宿主机上的 `127.0.0.1:7890` 在构建容器里指的是容器自己，不是宿主机。** 只在系统里开着代理是不够的，构建过程完全走的直连——表现就是 `camoufox fetch` 那步挂十几分钟不动。
+
+代理地址按平台选：
+
+| 平台 | 构建容器里的代理地址 | 备注 |
+|------|---------------------|------|
+| Docker Desktop（Windows / macOS） | `http://host.docker.internal:7890` | 开箱可解析 |
+| Linux | `http://172.17.0.1:7890` 或宿主机内网 IP | 需给 `docker build` 加 `--add-host=host.docker.internal:host-gateway` 才能用域名 |
+
+代理客户端要打开 **允许局域网连接**（Clash / Mihomo 的 *Allow LAN*），否则它只监听 `127.0.0.1`，容器连不上。
+
+```bash
+PROXY=http://host.docker.internal:7890      # Linux 改成 http://172.17.0.1:7890
+
+docker compose build --progress plain \
+  --build-arg HTTP_PROXY="$PROXY" \
+  --build-arg HTTPS_PROXY="$PROXY" \
+  --build-arg NO_PROXY=localhost,127.0.0.1,::1
+```
+
+`HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` 是 Docker 的预定义构建参数，**不需要**在 Dockerfile 里声明 `ARG`，也不会被写进最终镜像的 ENV，更不会让构建缓存失效。
+
+先验证代理在容器里通不通：
+
+```bash
+docker run --rm -e HTTPS_PROXY=http://host.docker.internal:7890 \
+  python:3.12-slim-bookworm \
+  python -c "import urllib.request;print(urllib.request.urlopen('https://api.github.com',timeout=20).status)"
+```
+
+打印 `200` 才说明代理可用。
+
+**运行期**（注册流量走代理）跟构建期是两回事：在「设置」页填 `browser_proxy`，同样不能填容器自己的 `127.0.0.1`。
+
+Docker Desktop 用户也可以一劳永逸：Settings → Resources → Proxies 里手动填代理，之后构建自动生效，不用每次带 `--build-arg`。
+
+## 8. 常见问题
 
 **构建卡在 `camoufox fetch`**  
-从 GitHub Releases 下载约 100MB。网络不通时构建不会失败（只打 WARNING），会在首次启动求解器时重试。想完全跳过：`WITH_SOLVER=0 docker compose build`。
+从 GitHub Releases 下载约 100MB，国内直连基本卡死。走代理见 [§7](#7-构建期走代理)。网络不通时构建**不会失败**（只打 WARNING），会在首次启动求解器时重试下载。想完全跳过：`WITH_SOLVER=0 docker compose build`。
 
 **日志里 `Headful Chrome requires DISPLAY`**  
 Xvfb 没起来。`docker compose logs` 看 entrypoint 的报错，确认没有把 `GROK_REGISTER_BROWSER_HEADLESS` 改成 `true` 之外的奇怪值。
