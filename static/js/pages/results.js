@@ -1,4 +1,5 @@
 import { api } from '../api.js';
+import { copyTextWithToast } from '../clipboard.js';
 import { showToast } from '../components/toast.js';
 import { createTable } from '../components/table.js';
 import { animateCountNodes } from '../components/count-up.js';
@@ -299,8 +300,11 @@ async function copyChatDenied() {
     const res = await api('GET', '/api/results/chat-denied');
     const rows = res.data || [];
     if (!rows.length) return showToast('没有可复制的无权限账号', 'warning');
-    await navigator.clipboard.writeText(rows.map(r => r.email).join('\n'));
-    showToast(`已复制 ${rows.length} 个无权限账号`, 'success');
+    await copyTextWithToast(
+        rows.map(r => r.email).join('\n'),
+        showToast,
+        `已复制 ${rows.length} 个无权限账号`,
+    );
 }
 
 async function clearChatDenied() {
@@ -336,8 +340,7 @@ async function loadSSO() {
                 btn.setAttribute('aria-label', '复制此 SSO 令牌');
                 btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
                 btn.addEventListener('click', () => {
-                    navigator.clipboard.writeText(sso);
-                    showToast('SSO 令牌已复制到剪切板', 'success');
+                    copyTextWithToast(sso, showToast, 'SSO 令牌已复制到剪切板');
                 });
 
                 container.appendChild(span);
@@ -374,8 +377,7 @@ async function copyAllSSO() {
     const res = await api('GET', '/api/results/sso');
     if (res.success && res.data.length) {
         const text = res.data.map(r => r.sso_value).join('\n');
-        await navigator.clipboard.writeText(text);
-        showToast(`已批量复制 ${res.data.length} 条 SSO 会话 Token`, 'success');
+        await copyTextWithToast(text, showToast, `已批量复制 ${res.data.length} 条 SSO 会话 Token`);
     } else {
         showToast('没有可导出的 SSO 数据', 'warning');
     }
@@ -385,8 +387,7 @@ async function copyAllAccounts() {
     const res = await api('GET', '/api/results/accounts');
     if (res.success && res.data.length) {
         const text = res.data.map(r => `${r.email}----${r.account_password}`).join('\n');
-        await navigator.clipboard.writeText(text);
-        showToast(`已批量复制 ${res.data.length} 个账号密码凭证`, 'success');
+        await copyTextWithToast(text, showToast, `已批量复制 ${res.data.length} 个账号密码凭证`);
     } else {
         showToast('没有可导出的账号数据', 'warning');
     }
