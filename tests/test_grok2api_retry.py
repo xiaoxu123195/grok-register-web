@@ -26,12 +26,42 @@ class Grok2APIRetryWorkerTest(unittest.TestCase):
             }
             self.assertEqual(worker.run_once(), 1)
 
+        # The worker must target a single backend, or a grok2api retry would
+        # also re-run CPA / Sub2API delivery for an already-delivered account.
         upload.assert_called_once_with(
             db.get_settings.return_value,
             'sso-token',
             email='[邮箱]',
+            only='grok2api',
         )
         db.finish_grok2api_upload.assert_called_once_with(9, True)
+
+    def test_sub2api_retry_targets_only_the_sub2api_backend(self):
+        db = Mock()
+        db.get_settings.return_value = {
+            'sub2api_auto_upload': 'true',
+            'sub2api_url': 'http://[IP]:8080',
+        }
+        db.claim_sub2api_retries.return_value = [{
+            'id': 11,
+            'email': '[邮箱]',
+            'sso_value': 'sso-token',
+        }]
+        worker = Grok2APIRetryWorker(db)
+
+        with patch('core.grok2api_retry.upload_registered_sso') as upload:
+            upload.return_value = {'sub2api': {'ok': True}}
+            self.assertEqual(worker.run_once(), 1)
+
+        upload.assert_called_once_with(
+            db.get_settings.return_value,
+            'sso-token',
+            email='[邮箱]',
+            only='sub2api',
+        )
+        db.finish_sub2api_upload.assert_called_once_with(11, True)
+        # grok2api is disabled here, so its queue must not even be claimed.
+        db.claim_grok2api_retries.assert_not_called()
 
     def test_failed_delivery_is_kept_for_later_retry(self):
         db = Mock()

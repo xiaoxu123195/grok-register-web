@@ -75,14 +75,19 @@ class Grok2APIClientTest(unittest.TestCase):
     def test_disabled_auto_upload_is_explicitly_logged(self):
         with self.assertLogs('register', level='INFO') as logs:
             result = upload_registered_sso(
-                {'grok2api_auto_upload': 'false', 'cpa_auto_export': 'false'},
+                {
+                    'grok2api_auto_upload': 'false',
+                    'sub2api_auto_upload': 'false',
+                    'cpa_auto_export': 'false',
+                },
                 'sso-token',
                 email='user@example.com',
             )
 
         self.assertIsNone(result)
         self.assertIn(
-            'No delivery backend enabled (cpa_auto_export / grok2api_auto_upload)',
+            'No delivery backend enabled '
+            '(cpa_auto_export / sub2api_auto_upload / grok2api_auto_upload)',
             '\n'.join(logs.output),
         )
 
