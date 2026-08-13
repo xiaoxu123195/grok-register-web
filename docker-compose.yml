@@ -1,0 +1,50 @@
+services:
+  grok-register-web:
+    build:
+      context: .
+      args:
+        # 0 = 跳过 Camoufox 本地 Turnstile Solver（镜像小约 250MB，但协议注册需自备外置求解器）
+        WITH_SOLVER: "${WITH_SOLVER:-1}"
+    image: grok-register-web:latest
+    container_name: grok-register-web
+    restart: unless-stopped
+
+    # 安全提示：本服务没有任何登录认证，任何能访问该端口的人都能看到 SSO / 账号密码。
+    # 默认发布到所有网卡是为了让你能用 http://<服务器IP>:5000 直接访问；
+    # 若服务器在公网，请改成下面注释的回环绑定 + SSH 隧道，或前置带认证的 HTTPS 反代。
+    ports:
+      - "${GROK_REGISTER_BIND:-0.0.0.0}:${GROK_REGISTER_PORT:-5000}:5000"
+      # - "127.0.0.1:5000:5000"
+
+    environment:
+      TZ: "${TZ:-Asia/Shanghai}"
+      # 固定 SECRET_KEY，重启后会话不失效；不设则每次启动随机生成
+      GROK_REGISTER_SECRET_KEY: "${GROK_REGISTER_SECRET_KEY:-}"
+      # 容器内 Chromium 路径 + headful（配合 Xvfb），与 scripts/run_with_xvfb.sh 一致
+      GROK_REGISTER_BROWSER_PATH: /usr/bin/chromium
+      GROK_REGISTER_BROWSER_HEADLESS: "false"
+      # 下面两项一旦设置就会覆盖「设置」页里的选项，默认交给 UI 控制
+      # GROK_REGISTER_BACKEND: protocol
+      # GROK_REGISTER_CONCURRENCY: "1"
+
+    volumes:
+      # SQLite / 导出 / 诊断文件都落在这里，先在宿主机 mkdir -p ./data
+      - ./data:/app/data
+      # CPA 热载目录（设置页开启 CPA 时按需打开，并与设置里的路径保持一致）
+      # - ./cpa/auths:/cpa/auths
+      # - ./cpa/auths-chat-dead:/cpa/auths-chat-dead
+
+    # Chromium 在默认 64MB 的 /dev/shm 下容易崩
+    shm_size: "1gb"
+
+    # 让容器内可以用 host.docker.internal 访问宿主机上的 grok2api / 代理
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    stop_grace_period: 30s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

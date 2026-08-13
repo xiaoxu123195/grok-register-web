@@ -16,6 +16,7 @@
 |------|------|
 | [docs/USAGE.md](docs/USAGE.md) | 日常使用：导入邮箱、开任务、读日志、导出、补传、补激活 |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | 设置项字典、环境变量、推荐组合、grok2api / CPA 对接 |
+| [docs/DOCKER.md](docs/DOCKER.md) | Docker / Compose 后台部署：数据卷、网络、安全、排查 |
 | [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) | 注册 vs 交付失败、限流、出口节点、Solver、Issue 脱敏 |
 | [CHANGELOG.md](CHANGELOG.md) | 版本记录 |
 | [core/DESIGN.md](core/DESIGN.md) | 核心模块设计决策 |
@@ -102,6 +103,19 @@ Linux 无桌面跑**浏览器路径**时用 Xvfb（不要硬开无头）：
 ```bash
 bash scripts/run_with_xvfb.sh --host 0.0.0.0 --port 5000 --allow-remote
 ```
+
+### 2b. 服务器后台部署（Docker）
+
+镜像已内置 Chromium + Xvfb + Camoufox Solver，容器后台常驻，不占前台、SSH 断开也不停：
+
+```bash
+mkdir -p data                   # 先建，避免 Docker 建成 root 属主
+cp .env.example .env            # 可选：改端口 / 时区 / SECRET_KEY
+docker compose up -d --build
+docker compose logs -f          # 看日志
+```
+
+访问 `http://<服务器IP>:5000`。**该服务没有登录认证**，公网机器请改成回环绑定 + SSH 隧道，或前置带认证的 HTTPS 反代。细节见 [docs/DOCKER.md](docs/DOCKER.md)。
 
 ### 3. 首次配置（推荐长跑）
 

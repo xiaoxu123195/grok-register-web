@@ -1,0 +1,50 @@
+# Build context hygiene — keep the image small and free of local secrets.
+.git/
+.gitignore
+.gitattributes
+
+# Runtime / secrets — never bake into an image
+data/
+*.db
+*.db-shm
+*.db-wal
+.env
+.env.*
+!.env.example
+
+# Account dumps / exports
+*outlook*.txt
+OUTLOOK*.txt
+accounts_*.txt
+sso.txt
+sso.json
+registered_accounts.*
+mail_credentials.txt
+proxies.txt
+**/proxies.txt
+
+# Python / tooling junk
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.log
+browser-profile*/
+artifacts/
+.tmp
+
+# Docs and assets that the runtime never reads
+docs/screenshots/
+design-system/
+CHANGELOG.md
+
+# Compose / editor
+docker-compose.yml
+docker-compose.*.yml
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
