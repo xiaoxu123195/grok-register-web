@@ -648,22 +648,55 @@ class ProtocolWorkerFailureMappingTest(unittest.TestCase):
             'conversion': {'created': 1},
         }
 
-        worker._upload_grok2api({}, 'sso-token', 'a@b.com', 9)
+        worker._upload_delivery(
+            {}, 'sso-token', 'a@b.com', 9, grok2api_enabled=True,
+        )
 
         db.begin_grok2api_upload.assert_called_once_with(9)
         db.finish_grok2api_upload.assert_called_once_with(9, True)
+        # A grok2api-only round must not touch the sub2api claim table.
+        db.begin_sub2api_upload.assert_not_called()
 
     @patch('core.registration.protocol_worker.upload_registered_sso')
     def test_protocol_grok2api_upload_records_failure(self, upload):
         worker, db, state, socketio = self._worker()
         upload.side_effect = RuntimeError('upload failed')
 
-        worker._upload_grok2api({}, 'sso-token', 'a@b.com', 9)
+        worker._upload_delivery(
+            {}, 'sso-token', 'a@b.com', 9, grok2api_enabled=True,
+        )
 
         db.begin_grok2api_upload.assert_called_once_with(9)
         finish_args = db.finish_grok2api_upload.call_args.args
         self.assertEqual(finish_args[:2], (9, False))
         self.assertIsInstance(finish_args[2], RuntimeError)
+
+    @patch('core.registration.protocol_worker.upload_registered_sso')
+    def test_protocol_sub2api_upload_records_success(self, upload):
+        worker, db, state, socketio = self._worker()
+        upload.return_value = {'sub2api': {'account_id': 7}}
+
+        worker._upload_delivery(
+            {}, 'sso-token', 'a@b.com', 9, sub2api_enabled=True,
+        )
+
+        db.begin_sub2api_upload.assert_called_once_with(9)
+        db.finish_sub2api_upload.assert_called_once_with(9, True)
+        db.begin_grok2api_upload.assert_not_called()
+
+    @patch('core.registration.protocol_worker.upload_registered_sso')
+    def test_protocol_delivery_failure_marks_every_enabled_backend(self, upload):
+        """One transport error must not leave a backend stuck in 'claimed'."""
+        worker, db, state, socketio = self._worker()
+        upload.side_effect = RuntimeError('upload failed')
+
+        worker._upload_delivery(
+            {}, 'sso-token', 'a@b.com', 9,
+            grok2api_enabled=True, sub2api_enabled=True,
+        )
+
+        self.assertFalse(db.finish_grok2api_upload.call_args.args[1])
+        self.assertFalse(db.finish_sub2api_upload.call_args.args[1])
 
     def test_prepare_transport_pure_http_without_browser(self):
         worker, db, state, socketio = self._worker()
