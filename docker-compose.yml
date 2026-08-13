@@ -37,6 +37,11 @@ services:
     # Chromium 在默认 64MB 的 /dev/shm 下容易崩
     shm_size: "1gb"
 
+    # PID 1 不享受内核的默认信号处理：没有 init 的话 SIGTERM 会被直接丢弃，
+    # docker stop 要空等满 stop_grace_period 再 SIGKILL（exit 137）。
+    # 顺带回收 Xvfb / Camoufox 留下的僵尸进程。
+    init: true
+
     # 让容器内可以用 host.docker.internal 访问宿主机上的 grok2api / 代理
     extra_hosts:
       - "host.docker.internal:host-gateway"

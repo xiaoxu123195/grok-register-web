@@ -157,6 +157,9 @@ Xvfb 没起来。`docker compose logs` 看 entrypoint 的报错，确认没有�
 **Chromium 启动即崩 / 页面白屏**  
 `/dev/shm` 太小。compose 已设 `shm_size: 1gb`，如果是自己 `docker run`，加 `--shm-size=1g`。
 
+**停止要等 30 秒，退出码 137**  
+说明容器缺 init：应用成了 PID 1，而内核不给 PID 1 套用默认信号处理，SIGTERM 被直接丢弃，Docker 只能等满 `stop_grace_period` 再 SIGKILL。compose 里的 `init: true` 已经解决（PID 1 交给 docker-init 转发信号），正常应当是 2 秒内停止、退出码 143。自己 `docker run` 的话记得加 `--init`。
+
 **`docker compose ps` 显示 unhealthy**  
 健康检查打的是容器内 `http://127.0.0.1:5000/`。若改了 `GROK_REGISTER_PORT`，那是宿主机端口，容器内仍是 5000，不影响健康检查。真 unhealthy 就看日志。
 
