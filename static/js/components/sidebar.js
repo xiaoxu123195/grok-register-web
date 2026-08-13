@@ -1,3 +1,5 @@
+import { api } from '../api.js';
+
 const NAV_GROUPS = [
     {
         label: '工作流',
@@ -64,6 +66,20 @@ export function renderSidebar(container) {
             </div>
         </div>
     `;
+
+    if (document.body.dataset.authEnabled === 'true') {
+        const footer = container.querySelector('.sidebar-footer');
+        const logout = document.createElement('button');
+        logout.type = 'button';
+        logout.className = 'btn btn-secondary btn-sm sidebar-logout';
+        logout.textContent = '退出登录';
+        logout.addEventListener('click', async () => {
+            logout.disabled = true;
+            await api('POST', '/api/auth/logout');
+            window.location.href = '/login';
+        });
+        footer.appendChild(logout);
+    }
 
     const nav = container.querySelector('.nav-list');
     NAV_GROUPS.forEach((group) => {

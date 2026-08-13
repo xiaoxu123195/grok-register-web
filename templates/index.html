@@ -23,7 +23,7 @@
         })();
     </script>
 </head>
-<body>
+<body data-auth-enabled="{{ 'true' if auth_enabled else 'false' }}">
     <div class="bg-aurora" aria-hidden="true"><i></i><i></i></div>
 
     <div class="app-shell">

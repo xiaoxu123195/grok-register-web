@@ -8,6 +8,12 @@ export async function api(method, path, body = null) {
     }
     try {
         const res = await fetch(path, opts);
+        // An expired session must bounce to the login form rather than let
+        // every page render an unexplained failure toast.
+        if (res.status === 401) {
+            window.location.href = '/login';
+            return { success: false, data: null, message: '未登录', code: 'UNAUTHORIZED' };
+        }
         if (res.headers.get('content-type')?.includes('application/json')) {
             return await res.json();
         }

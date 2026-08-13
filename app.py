@@ -11,10 +11,13 @@ import mimetypes
 mimetypes.add_type('application/javascript', '.js')
 mimetypes.add_type('text/css', '.css')
 
-from flask import Flask, abort, render_template, request
+from datetime import timedelta
+
+from flask import Flask, abort, jsonify, redirect, render_template, request, session
 from flask_socketio import SocketIO
 
 from config import DEFAULT_HOST, DEFAULT_PORT
+from core.auth import AdminGate
 from core.database import Database
 from core.browser import BrowserManager, redact_proxy_url
 from core.email_manager import EmailManager
@@ -23,6 +26,7 @@ from core.oauth import OAuthManager
 from core.grok2api_retry import Grok2APIRetryWorker
 from core.web_security import is_loopback_host, origin_matches_host
 from api.accounts import init_accounts_api
+from api.auth import init_auth_api
 from api.register import init_register_api
 from api.results import init_results_api
 from api.settings import init_settings_api
@@ -45,7 +49,15 @@ app.config.update(
     SECRET_KEY=os.environ.get('GROK_REGISTER_SECRET_KEY') or secrets.token_hex(32),
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE='Strict',
+    # Only settable behind HTTPS; over plain HTTP a Secure cookie is never sent
+    # back and the operator would be stuck in a login loop.
+    SESSION_COOKIE_SECURE=str(
+        os.environ.get('GROK_REGISTER_COOKIE_SECURE', 'false'),
+    ).strip().lower() in ('1', 'true', 'yes', 'on'),
+    PERMANENT_SESSION_LIFETIME=timedelta(days=7),
 )
+
+admin_gate = AdminGate.from_environment(os.environ)
 
 # Flask-SocketIO's default same-origin validation is intentional here.
 socketio = SocketIO(app, async_mode='threading')
@@ -62,6 +74,7 @@ oauth_mgr = OAuthManager(db)
 grok2api_retry_worker = Grok2APIRetryWorker(db)
 
 # ── Register API Blueprints ────────────────────────────────
+app.register_blueprint(init_auth_api(admin_gate))
 app.register_blueprint(init_accounts_api(db, oauth_mgr))
 app.register_blueprint(init_register_api(db, browser_mgr, email_mgr, socketio))
 app.register_blueprint(init_results_api(db))
@@ -69,7 +82,13 @@ app.register_blueprint(init_settings_api(db))
 
 # ── WebSocket ──────────────────────────────────────────────
 import api.register as register_api
-socket_handler = init_websocket(socketio, state_getter=lambda: register_api._state)
+# The connect handler replays the recent log buffer, which carries registration
+# emails — it must be gated exactly like the HTTP surface.
+socket_handler = init_websocket(
+    socketio,
+    state_getter=lambda: register_api._state,
+    auth_check=lambda: admin_gate.is_authenticated(session),
+)
 register_logger = logging.getLogger('register')
 register_logger.setLevel(logging.INFO)
 register_logger.addHandler(socket_handler)
@@ -89,10 +108,28 @@ def enforce_same_origin_for_writes():
         if origin and not origin_matches_host(origin, request.host):
             abort(403)
 
+
+@app.before_request
+def require_admin_session():
+    if not admin_gate.enabled or admin_gate.is_public_path(request.path):
+        return None
+    if admin_gate.is_authenticated(session):
+        return None
+    # JSON for the SPA so api.js can bounce to the login page; a redirect for
+    # anything a browser navigated to directly.
+    if request.path.startswith('/api/'):
+        return jsonify({
+            'success': False,
+            'data': None,
+            'message': '未登录或会话已过期',
+            'code': 'UNAUTHORIZED',
+        }), 401
+    return redirect('/login')
+
 # ── Page route ─────────────────────────────────────────────
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', auth_enabled=admin_gate.enabled)
 
 # ── Main ───────────────────────────────────────────────────
 def main():
@@ -108,6 +145,21 @@ def main():
     is_loopback = is_loopback_host(args.host)
     if not is_loopback and not args.allow_remote:
         parser.error('Refusing non-loopback bind without --allow-remote')
+
+    if admin_gate.enabled:
+        logger.info('Admin password gate is ENABLED')
+        if not os.environ.get('GROK_REGISTER_SECRET_KEY'):
+            logger.warning(
+                'GROK_REGISTER_SECRET_KEY is unset, so the session key is random '
+                'per boot and every restart signs you out',
+            )
+    elif not is_loopback:
+        logger.warning(
+            'Bound to %s with NO admin password. Anyone who can reach this port '
+            'can read collected SSO tokens and account passwords. Set %s to '
+            'require a login (see docs/DOCKER.md).',
+            args.host, 'GROK_REGISTER_ADMIN_PASSWORD_HASH',
+        )
 
     # Initialize database
     db.init_database()

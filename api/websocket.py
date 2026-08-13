@@ -39,11 +39,17 @@ class SocketIOHandler(logging.Handler):
         return list(self._buffer)
 
 
-def init_websocket(socketio, state_getter=None):
+def init_websocket(socketio, state_getter=None, auth_check=None):
     handler = SocketIOHandler(socketio)
 
     @socketio.on('connect')
     def handle_connect():
+        # Gate before anything is emitted: the replay buffer below carries
+        # registration emails, so an unauthenticated socket would leak the
+        # log stream even when every HTTP route is locked down.
+        if auth_check is not None and not auth_check():
+            return False
+
         # Replay recent log buffer on connect (no await needed inside socket event)
         entries = handler.replay()
         if entries:
